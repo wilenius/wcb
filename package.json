@@ -1,0 +1,16 @@
+{
+  "name": "wcb",
+  "version": "1.0.0",
+  "description": "World Cup 2026 betting pool for a group of friends",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/prepare-data.mjs",
+    "dev": "wrangler pages dev public",
+    "test": "node --test test/scoring.test.js",
+    "deploy": "wrangler pages deploy public"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

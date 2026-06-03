@@ -1,0 +1,4 @@
+# Copy to `.dev.vars` for local `wrangler pages dev`. Do not commit `.dev.vars`.
+ADMIN_KEY=dev-admin
+# Optional: override the lock time for local testing (past = bets published).
+# DEADLINE=2020-01-01T00:00:00Z
