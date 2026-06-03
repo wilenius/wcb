@@ -144,6 +144,19 @@ table.board .medal-1 td.rank { color: var(--gold); font-weight: 700; }
 .tag.hit { background: rgba(54,211,153,0.18); border-color: var(--accent); }
 .tag.gold { background: rgba(244,196,48,0.18); border-color: var(--gold); }
 
+/* Round of 32 picker: group cards holding selectable chips */
+.hint { font-size: 0.85rem; margin: 0 0 12px; }
+.groups {
+  display: grid; gap: 8px; margin: 4px 0 12px;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+}
+.grp { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.grp-h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.grp-n { font-size: 0.8rem; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.grp-n.ok { color: var(--accent); }
+.grp-n.low { color: var(--muted); }
+.groups .chip { padding: 8px 10px; font-size: 0.9rem; }
+
 .muted { color: var(--muted); }
 .center { text-align: center; }
 .countdown { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; margin: 8px 0; }

@@ -1,5 +1,6 @@
 import { getJSON, postJSON, esc, flag, teamLabel, fmtDateTime } from "./common.js";
 import { ROUNDS, CHAMPION_POINTS, SCORERS } from "./rounds.js";
+import { GROUPS } from "./tournament.js";
 
 const app = document.getElementById("app");
 
@@ -10,6 +11,10 @@ const state = {
 };
 let TEAMS = [];
 let SQUADS = [];
+
+// team -> group name, so the Round of 32 picker can be laid out and capped per group.
+const TEAM_GROUP = {};
+for (const g of GROUPS) for (const t of g.teams) TEAM_GROUP[t] = g.name;
 
 init();
 
@@ -58,7 +63,7 @@ function render(status) {
     <div id="msg"></div>
     <button class="btn" id="submit" disabled>Submit my bet</button>
     <div class="spacer"></div>
-    <p class="muted center" style="font-size:.8rem">Tip: pick 32 teams, then narrow them down round by round.</p>
+    <p class="muted center" style="font-size:.8rem">Tip: pick 2–3 teams per group for the Round of 32, then narrow them down round by round.</p>
   `;
   renderFunnel();
   renderScorers();
@@ -68,16 +73,33 @@ function render(status) {
 }
 
 function candidatesFor(idx) {
-  if (idx === 0) return TEAMS;
   return [...state.sel[ROUNDS[idx - 1].key]];
+}
+
+// Per-group tally of the Round of 32 picks.
+function r32GroupCounts() {
+  const counts = Object.fromEntries(GROUPS.map((g) => [g.name, 0]));
+  for (const t of state.sel.r32) counts[TEAM_GROUP[t]]++;
+  return counts;
+}
+
+// A valid Round of 32 has all 32 picks and 2 or 3 from every group: a group's bottom
+// team never advances, and its top two always do, so each group sends 2 or 3.
+function r32Valid() {
+  if (state.sel.r32.size !== ROUNDS[0].count) return false;
+  const counts = r32GroupCounts();
+  return GROUPS.every((g) => counts[g.name] >= 2 && counts[g.name] <= 3);
 }
 
 function renderFunnel() {
   const host = document.getElementById("funnel");
   host.innerHTML = "";
 
-  ROUNDS.forEach((round, idx) => {
-    const prevDone = idx === 0 || state.sel[ROUNDS[idx - 1].key].size === ROUNDS[idx - 1].count;
+  host.appendChild(buildR32Card());
+
+  ROUNDS.slice(1).forEach((round, i) => {
+    const idx = i + 1;
+    const prevDone = idx === 1 ? r32Valid() : state.sel[ROUNDS[idx - 1].key].size === ROUNDS[idx - 1].count;
     const chosen = state.sel[round.key];
     const cands = candidatesFor(idx);
 
@@ -135,6 +157,47 @@ function renderFunnel() {
   host.appendChild(champCard);
 }
 
+// The Round of 32 stage is laid out by group (like the bracket's group divisions) so
+// it's clear which teams compete with each other, and impossible sets are blocked:
+// at most 3 picks per group, and the stage isn't complete until every group has 2–3.
+function buildR32Card() {
+  const round = ROUNDS[0];
+  const chosen = state.sel.r32;
+  const counts = r32GroupCounts();
+  const valid = r32Valid();
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="stage-head">
+      <h3>${esc(round.label)}</h3>
+      <span class="pts">${round.points} pts each</span>
+      <span class="counter ${valid ? "done" : ""}">${chosen.size} / ${round.count}</span>
+    </div>
+    <p class="muted hint">Pick who survives the groups — 2 or 3 teams from each group (the bottom team is out; the top two always go through).</p>
+    <div class="groups"></div>`;
+  const wrap = card.querySelector(".groups");
+
+  for (const g of GROUPS) {
+    const n = counts[g.name];
+    const gcard = document.createElement("div");
+    gcard.className = "grp";
+    gcard.innerHTML = `<div class="grp-h">Group ${esc(g.name)}<span class="grp-n ${n >= 2 ? "ok" : "low"}">${n}/3</span></div>`;
+    for (const team of g.teams) {
+      const sel = chosen.has(team);
+      const blocked = !sel && (chosen.size >= round.count || n >= 3);
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip" + (sel ? " sel" : "") + (blocked ? " disabled" : "");
+      chip.innerHTML = `<span class="fl">${flag(team)}</span><span class="nm">${esc(team)}</span>`;
+      if (sel || !blocked) chip.addEventListener("click", () => toggleTeam("r32", 0, team));
+      gcard.appendChild(chip);
+    }
+    wrap.appendChild(gcard);
+  }
+  return card;
+}
+
 function toggleTeam(roundKey, idx, team) {
   const round = ROUNDS[idx];
   const set = state.sel[roundKey];
@@ -145,6 +208,8 @@ function toggleTeam(roundKey, idx, team) {
     if (state.champion === team) state.champion = null;
   } else {
     if (set.size >= round.count) return;
+    // Round of 32: never more than 3 teams from one group (the 4th can't advance).
+    if (idx === 0 && r32GroupCounts()[TEAM_GROUP[team]] >= 3) return;
     set.add(team);
   }
   renderFunnel();
@@ -236,7 +301,7 @@ function scorerSlot(i) {
 function isComplete() {
   const name = (document.getElementById("name")?.value || "").trim();
   const key = (document.getElementById("key")?.value || "").trim();
-  const roundsOk = ROUNDS.every((r) => state.sel[r.key].size === r.count);
+  const roundsOk = r32Valid() && ROUNDS.slice(1).every((r) => state.sel[r.key].size === r.count);
   const scorersOk = state.scorers.every(Boolean);
   return name && key && roundsOk && state.champion && scorersOk;
 }
