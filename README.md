@@ -90,10 +90,11 @@ and add the env vars/secrets there. The `functions/` directory is picked up auto
 3. Friends go to `/`, enter their name + key, fill the funnel + 3 goalscorers, and submit
    (one submission per key, no edits).
 4. After the deadline, `/bets` and `/leaderboard` open automatically.
-5. **Results:** in the admin **Results** panel, after each round enter the teams that
-   advanced (one per line per stage), the champion, and goal tallies (one
-   `Country|Player = goals` per line, using the exact names from the player list). The
-   leaderboard recomputes immediately. Update it as the tournament progresses.
+5. **Results:** the admin **Results** panel works just like the bet form — the same
+   funnel picker records who actually advanced each round and the champion, and the
+   goalscorer list is pre-built from every player anyone bet on, so you just type each
+   one's goal count. The leaderboard recomputes immediately. Update it as the
+   tournament progresses.
 
 ### Why results are entered manually
 

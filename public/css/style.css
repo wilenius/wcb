@@ -118,6 +118,17 @@ button.btn.inline { width: auto; padding: 8px 14px; font-size: 0.9rem; }
 .chosen .nm { flex: 1; }
 .chosen .x { cursor: pointer; color: var(--muted); padding: 2px 8px; }
 
+/* Admin goalscorer list: one row per backed player + a goal-count box */
+.goal-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-bottom: 1px solid var(--line); }
+.goal-row:last-child { border-bottom: none; }
+.goal-row .fl { font-size: 1.15rem; line-height: 1; }
+.goal-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-row .backers { font-size: 0.78rem; white-space: nowrap; }
+.goal-row input[type=number] { width: 64px; text-align: center; padding: 6px 8px; }
+.goal-row.scored { background: rgba(54,211,153,0.1); }
+.goal-row.scored input[type=number] { border-color: var(--accent); }
+
 .msg { padding: 12px 14px; border-radius: 10px; margin: 12px 0; font-size: 0.92rem; }
 .msg.err { background: rgba(248,113,113,0.16); border: 1px solid var(--danger); color: #fecaca; }
 .msg.ok { background: rgba(54,211,153,0.16); border: 1px solid var(--accent); color: #bbf7d0; }

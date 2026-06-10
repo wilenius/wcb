@@ -1,5 +1,6 @@
-import { getJSON, esc, fmtDateTime } from "./common.js";
-import { ROUNDS } from "./rounds.js";
+import { esc, flag, fmtDateTime } from "./common.js";
+import { SCORERS } from "./rounds.js";
+import { Funnel } from "./funnel.js";
 
 const app = document.getElementById("app");
 const KEYHDR = "x-admin-key";
@@ -105,61 +106,108 @@ async function renderKeys() {
 }
 
 /* ---------------- Results ---------------- */
+//
+// Recording results mirrors filling in a bet: the same funnel picker chooses who actually
+// advanced each round + the champion, and the goalscorer list is pre-built from every
+// player anyone bet on — the admin just types how many goals each scored. The leaderboard
+// recomputes from this.
+
+let resFunnel;
 
 async function renderResults() {
   const host = document.getElementById("results");
-  let m;
-  try { m = (await api("GET", "/api/admin/results")).results; }
-  catch (e) { host.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
-
-  const goalsText = Object.entries(m.goals || {}).map(([k, v]) => `${k} = ${v}`).join("\n");
-  const roundFields = ROUNDS.map((r) =>
-    `<label class="field"><span>${esc(r.label)} — ${r.count} teams (one per line)</span>
-      <textarea id="rf-${r.key}" rows="4">${esc((m[r.key] || []).join("\n"))}</textarea></label>`).join("");
+  let m, bets;
+  try {
+    [m, { bets }] = await Promise.all([
+      api("GET", "/api/admin/results").then((r) => r.results),
+      api("GET", "/api/admin/bets"),
+    ]);
+  } catch (e) { host.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
 
   host.innerHTML = `
     <div class="card">
       <h3>Results</h3>
       <p class="muted" style="font-size:.85rem">
-        Enter the real outcome after each round; the leaderboard recomputes from this.
-        ${m.updatedAt ? "Last updated " + esc(fmtDateTime(m.updatedAt)) + "." : "Nothing recorded yet."}
+        Mark who advanced each round and the champion, then record goals below — just like
+        filling in a bet. The leaderboard recomputes from this; update it as the tournament
+        progresses. ${m.updatedAt ? "Last updated " + esc(fmtDateTime(m.updatedAt)) + "." : "Nothing recorded yet."}
       </p>
       <div id="res-msg"></div>
-      ${roundFields}
-      <label class="field"><span>World Champion</span>
-        <input type="text" id="rf-champion" value="${esc(m.champion || "")}"></label>
-      <label class="field"><span>Goals — one per line as <code>Country|Player = goals</code>
-        (use the exact names from the player list)</span>
-        <textarea id="rf-goals" rows="6" placeholder="Brazil|Vinicius Junior = 3">${esc(goalsText)}</textarea></label>
+    </div>
+    <div id="res-funnel"></div>
+    <div id="res-goals"></div>
+    <div class="card">
       <div class="row-between">
         <button class="btn inline" id="save">Save results</button>
         <button class="btn secondary inline" id="clear">Clear all results</button>
       </div>
     </div>`;
 
-  document.getElementById("save").addEventListener("click", () => saveResults(collectResults()));
+  resFunnel = new Funnel(document.getElementById("res-funnel"), () => {});
+  resFunnel.setPicks(m);
+  resFunnel.render();
+  renderGoals(bets, m.goals || {});
 
+  document.getElementById("save").addEventListener("click", () => saveResults(collectResults()));
   document.getElementById("clear").addEventListener("click", () => {
     if (!confirm("Clear all recorded results?")) return;
     saveResults({ r32: [], r16: [], qf: [], sf: [], final: [], champion: "", goals: {} });
   });
 }
 
+// Every distinct player anyone bet on, plus any already-recorded scorer, each with a
+// goal-count input. Most-backed players first so the popular picks are easy to find.
+function renderGoals(bets, goals) {
+  const host = document.getElementById("res-goals");
+  const players = new Map(); // id -> { country, player, backers }
+  for (const bet of bets) {
+    for (const s of bet.scorers || []) {
+      const id = `${s.country}|${s.player}`;
+      const e = players.get(id) || { country: s.country, player: s.player, backers: 0 };
+      e.backers++;
+      players.set(id, e);
+    }
+  }
+  for (const id of Object.keys(goals)) {
+    if (players.has(id)) continue;
+    const [country, player] = id.split("|");
+    players.set(id, { country, player, backers: 0 });
+  }
+
+  const rows = [...players.entries()]
+    .sort((a, b) => b[1].backers - a[1].backers || a[1].player.localeCompare(b[1].player))
+    .map(([id, p]) => {
+      const g = Number(goals[id]) || 0;
+      return `<div class="goal-row${g > 0 ? " scored" : ""}">
+        <span class="fl">${flag(p.country)}</span>
+        <span class="nm">${esc(p.player)} <span class="meta muted">· ${esc(p.country)}</span></span>
+        <span class="meta muted backers">${p.backers ? p.backers + " backed" : ""}</span>
+        <input type="number" min="0" inputmode="numeric" data-goal-id="${esc(id)}" value="${g || ""}" placeholder="0">
+      </div>`;
+    }).join("");
+
+  host.innerHTML = `
+    <div class="card">
+      <div class="stage-head"><h3>Goalscorers</h3>
+        <span class="pts">${SCORERS.pointsPerGoal} pts per goal scored</span></div>
+      <p class="muted" style="font-size:.85rem;margin-top:0">
+        Every player anyone bet on. Enter goals scored (penalty-shootout goals excluded); leave blank for none.</p>
+      ${rows || `<p class="muted">No bets yet, so no players to score.</p>`}
+    </div>`;
+
+  host.querySelectorAll("input[data-goal-id]").forEach((inp) => {
+    inp.addEventListener("input", () =>
+      inp.closest(".goal-row").classList.toggle("scored", Number(inp.value) > 0));
+  });
+}
+
 function collectResults() {
-  const results = { champion: document.getElementById("rf-champion").value.trim(), goals: {} };
-  for (const r of ROUNDS) {
-    results[r.key] = document.getElementById("rf-" + r.key).value
-      .split("\n").map((s) => s.trim()).filter(Boolean);
-  }
-  for (const line of document.getElementById("rf-goals").value.split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    const i = t.lastIndexOf("=");
-    if (i < 0) continue;
-    const id = t.slice(0, i).trim();
-    const n = Number(t.slice(i + 1).trim());
-    if (id && !Number.isNaN(n)) results.goals[id] = n;
-  }
+  const results = { ...resFunnel.getPicks(), goals: {} };
+  results.champion = results.champion || "";
+  document.querySelectorAll("#res-goals input[data-goal-id]").forEach((inp) => {
+    const n = Number(inp.value);
+    if (inp.value.trim() !== "" && !Number.isNaN(n) && n > 0) results.goals[inp.dataset.goalId] = n;
+  });
   return results;
 }
 
@@ -167,6 +215,7 @@ async function saveResults(results) {
   try {
     await api("POST", "/api/admin/results", { results });
     await renderResults();
+    document.getElementById("res-msg").innerHTML = `<div class="msg ok">Results saved.</div>`;
   } catch (e) {
     document.getElementById("res-msg").innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
   }
